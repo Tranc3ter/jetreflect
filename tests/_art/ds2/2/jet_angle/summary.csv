@@ -1,0 +1,2 @@
+﻿group,n_frames,n_measured,n_valid,n_none,n_invalid,theta_i_mean,theta_i_std,theta_i_median,theta_r_mean,theta_r_std,theta_r_median,angle_between_mean,angle_between_std,rho_mean,rho_std,baseline_tilt_deg,px_per_mm
+2,3,3,3,0,0,68.5921,0.0,68.5921,81.7849,0.0,81.7849,29.623,0.0,2.7156,0.0,,

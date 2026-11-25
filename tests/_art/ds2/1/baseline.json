@@ -1,0 +1,19 @@
+{
+  "schema": "jetreflect/baseline-1",
+  "dataset": "synthetic",
+  "group": "1",
+  "image_size": [
+    768,
+    576
+  ],
+  "p1": [
+    258.58964933492956,
+    11.45425193572595
+  ],
+  "p2": [
+    481.41035066507044,
+    568.545748064274
+  ],
+  "offset_px": 0.0,
+  "source": "test"
+}

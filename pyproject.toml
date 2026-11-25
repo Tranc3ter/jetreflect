@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jetreflect"
+version = "1.0.0"
+description = "Liquid jet reflection angle: manual baseline, per-frame angles, QC"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.23",
+    "scipy>=1.9",
+    "opencv-python>=4.7",
+    "matplotlib>=3.6",
+]
+
+[project.scripts]
+jetreflect = "jetreflect.cli:main"
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["jetreflect"]

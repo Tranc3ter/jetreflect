@@ -1,0 +1,14 @@
+name: jetreflect
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy>=1.23
+  - scipy>=1.9
+  - opencv>=4.7
+  - matplotlib>=3.6
+  - pip
+  - pip:
+      - pytest>=7
+# 可选：让 OpenCV 在个别机器上更好地读 16-bit TIFF
+#      - tifffile

@@ -1,0 +1,56 @@
+{
+  "schema": "jetreflect/dataset-2",
+  "dataset": "ds",
+  "engine": "v2",
+  "params_engine": "v2",
+  "image_formats": [
+    ".tif",
+    ".tiff",
+    ".bmp",
+    ".png"
+  ],
+  "min_frames": 20,
+  "skip_dirs": [
+    "sample",
+    "jet_angle",
+    "results",
+    "_summary"
+  ],
+  "px_per_mm": null,
+  "params": {
+    "cmin": 30.0,
+    "dmin": 6.0,
+    "dmax": 45.0,
+    "target_width": 15.0,
+    "halfwin": 22.0,
+    "step": 2,
+    "scan_step": 4,
+    "max_rows": 520,
+    "max_miss": 8,
+    "wall_margin": 10.0,
+    "seed_min_v": 18.0,
+    "min_inc_points": 25,
+    "min_ref_points": 12,
+    "rms_i_max": 2.0,
+    "rms_r_max": 12.0,
+    "se_max": 0.02,
+    "theta_i_range": [
+      5.0,
+      89.9
+    ],
+    "theta_r_max": 89.5,
+    "rho_max": 10.0,
+    "ref_v": [
+      3.0,
+      140.0
+    ],
+    "ref_u_max": 340.0,
+    "ref_min_len": 60.0,
+    "env_thin": 6,
+    "min_mid_points": 15,
+    "min_axis_angle": 8.0,
+    "min_frames": 20
+  },
+  "created": "2026-11-22T17:29:44+08:00",
+  "note": "surface = undirected line a*x+b*y+c=0; angles do not depend on px_per_mm."
+}
