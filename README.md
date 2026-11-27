@@ -1,15 +1,6 @@
 # jetreflect — 液体射流反射角测量工具
 
-给一组"一张张图片"的背光高速摄影，回答四个问题：
-
-1. **反射面在哪？** —— 全手动拉一条**无向直线**（无限长），一组一条。
-2. **每一帧的入射射流、出流射流分别与法线成多少度？** 逐帧自动追踪、逐帧判定。
-3. **这组数据平均多少、角度比 ρ = tanθr/tanθi 多少、可信吗？** 统计 + QC。
-4. **物理量怎么算？** We / We⊥ / Re，速度与直径都可逐组登记。
-
-角度是两条直线的纯几何量，**不需要 px/mm 标定**；标定只影响直径换算、We、Re。
-
-> **版本 1.4**（相对 1.3）
+> **版本 1.4**
 > * 新增 `00_set_velocity.py`：把**射流速度逐组写进 `baseline.json`**（`velocity_mps`），
 >   `08_jet_physics.py` 优先用它，多速度数据集不再共用一个全局 V；
 > * 新增 `09_plot_single.py`（θr–θi、ρ–θi 单张图）、`11_plot_velocity.py`（θr/ρ–V）、
@@ -18,9 +9,9 @@
 
 ---
 
-## 1. 能做什么 / 不能做什么
+## 1. 功能
 
-| 能做 | 说明 |
+| 功能 | 说明 |
 |---|---|
 | 任意朝向的反射面 | 不假设水平/竖直，不假设射流竖直、出流在右下 |
 | 贴板掠出的出流 | 出流与板面只差 10–20° 也能分出来（用上下缘中线） |
@@ -29,14 +20,9 @@
 | 多数据集、多速度 | 每组一条基线、每组一个速度 |
 | 出图与视频 | 汇总图、θr–θi、ρ–θi、θr/ρ–V、逐帧叠加 MP4 |
 
-| 不能做 | 说明 |
-|---|---|
-| 三维重建 | 单相机，只能测**入射面内的投影角** |
-| 自动找反射面 | 反射面必须人工标一条线（每组 1 分钟） |
-| 液体内部速度场 | 只测射流轴线几何，不含 PIV |
-| 无标定算 We | We/Re 需要 px/mm 与初始直径 D |
 
 ---
+<img src="images\overlay_.png" width="45%">
 
 ## 2. 安装与运行
 
@@ -46,9 +32,6 @@ conda activate jetreflect
 pip install -r requirements.txt        # numpy scipy opencv-python matplotlib
 ```
 
-不需要 `pip install .`：把整个 `jetreflect/` 目录拷到任何位置，
-`python scripts/xxx.py ...` 或 `python -m jetreflect ...` 都能跑。
-想装成命令：`pip install -e .`，之后有 `jetreflect` 可执行文件。
 
 依赖：`numpy`、`scipy`、`opencv-python`、`matplotlib`；GUI 另需 `tkinter`（Anaconda 自带）。
 
@@ -61,7 +44,7 @@ pip install -r requirements.txt        # numpy scipy opencv-python matplotlib
 ├── jet_angle_config.json      全局参数（首次运行自动生成）
 ├── <组 A>/                    一个组 = 一个文件夹
 │   ├── xxx_00000000.tif       该组的全部图像（顺序即帧号）
-│   ├── xxx_tif.txt            相机元数据（不是图像，别删）
+│   ├── xxx_tif.txt            相机元数据
 │   ├── baseline.json          反射面 + 速度 + 直径（人工）
 │   └── jet_angle/             测量输出（自动生成）
 ├── <组 B>/
@@ -234,9 +217,6 @@ python scripts/02_measure.py "<根目录>" --group 2,2.5 --stride 2 --force
 | `--workers N` | 并行线程（默认 1；2–4 略有帮助） |
 | `--force` | 已有 `result.json` 也重算 |
 
-速度约 **0.07 s/帧**（640×480，单线程）：2001 帧/组 ≈ 2.5 分钟，11 组 ≈ 25 分钟。
-已跑过的组会自动跳过（`frames_measured` 对得上），中断可续跑。
-
 ---
 
 ### 3. `03_review.py` — 人工签核
@@ -376,12 +356,19 @@ r       = tanθr / tanθi
 python scripts/09_plot_single.py "<根目录>" [--out 目录] [--fit none|quadratic]
 ```
 
-两张独立的 PNG（默认不画拟合，`--fit` 才加）：
+两张独立的 PNG（默认不画拟合，`--fit` 才加），**同画布尺寸（7.4×4.6 in）、同横轴范围（20–80°）**：
 
 * `fig_single_theta_r.png`：θr vs θi，误差棒＝组内逐帧标准差；
-* `fig_single_rho.png`：ρ vs θi，含 ρ=1（镜面反射）虚线。
+  **两轴都取同一角度范围（20–80°）、都用 10° 主刻度 / 5° 副刻度**，
+  并画 `θr = θi`（镜面反射）虚线作参考。不作等比例（横纵一格在纸面上不等长，但都是 10°）。
+* `fig_single_rho.png`：ρ vs θi，横轴同样 20–80°、10° 主刻度；纵轴为 ρ（约 0.7–6.5，1.0 一格），
+  含 ρ=1（镜面反射）虚线。
 
-7.4×4.6 in、220 dpi，可直接插 PPT。
+两张都是 **1628×1011 px（220 dpi）**，横轴刻度对齐，可直接并排或上下叠放。
+
+> 注：`06_plot_rho.py` 的三联图共用一条 θi 横轴（三张图宽度必须一致），
+> 所以那张里的 θr 面板**没有**做等比例；要看"一格＝同样度数"的 θr–θi 图，
+> 用 `09` 的这张。
 
 ---
 
@@ -420,6 +407,9 @@ python scripts/11_plot_velocity.py "<根目录>" [--out 目录]
 有效率 < 20% 或有效帧 < 10 的组画成**空心灰标记**（如 0.9 m/s 的铺展组），不参与趋势解读。
 
 产出：`fig_velocity_panels.png`（双联）、`fig_velocity_theta_r.png`、`fig_velocity_rho.png`。
+
+θr 面板的**角度轴固定 20–80°、10° 主刻度**（与 `09` 的 θr–θi 图一致）；
+超出 80° 的点（如 0.9 m/s 的 82.6°）在顶边画白色三角并标数值，不会静默剪掉。
 
 ---
 
@@ -607,19 +597,7 @@ We / Re 见 §5.8。
 
 ---
 
-## 12. 验证
-
-| 方式 | 结果 |
-|---|---|
-| 旧数据 `20261112_8group`（8 组） | v2 复现 2 m/s 组 θi 68.69 / θr 76.17（旧引擎同值）；其余组差 < 0.6° |
-| 合成图（已知 68.660 / 76.200） | 回收 68.589 / 76.210，误差 0.07° / 0.01° |
-| `20261119_11group` 全量 22011 帧 | `ok` 21400 / `none` 522 / `invalid` 89；全部用轴线，无外缘回退 |
-| 轴线 vs 外缘 | 中位差 0.42°、p99 2.1°；22 帧（0.1%）> 5°（中线跟错边，可用 `d_axis_env` 过滤） |
-| 低速极限 | 0.9 m/s 组判 `none`（铺展），与物理一致 |
-
----
-
-## 13. 常见问题
+## 12. 常见问题
 
 **TIFF 私标签警告**：相机 TIFF 带非标准标签 0x7900，OpenCV 会打 `TIFF_Warning`；
 工具已把 OpenCV 日志压到 SILENT，不影响读取。
@@ -627,14 +605,9 @@ We / Re 见 §5.8。
 **没有图形界面**：`measure / report / 06 / 08 / 09 / 10 / 11` 不需要窗口；
 `mark / review / calibrate / 07` 需要。服务器上可先在本地标好 `baseline.json` 再拷过去。
 
-**中文/空格路径**：读写走 `np.fromfile + cv2.imdecode`，已处理。
-
 **改了阈值想重判**：改 `params` 后对该组 `--force`。
 
 **Excel 打开 CSV 乱码**：所有 CSV 用 UTF-8 with BOM 写出。
-
-**旧数据还能跑**：`baseline.json` 里只有 `p1/p2` 也能读（`line` 缺失时现算）；
-`offset_px` 被忽略；复现老结果加 `--engine legacy`。
 
 **多速度数据集**：每组用 `00_set_velocity.py` 写 `velocity_mps`，别只用 config 的全局 V。
 
@@ -642,7 +615,7 @@ We / Re 见 §5.8。
 
 ---
 
-## 14. 测试
+## 13. 测试
 
 ```bash
 python tests/test_geom.py        # 无向直线几何
@@ -654,7 +627,7 @@ python tests/test_pipeline.py    # 端到端 measure -> report -> sample
 
 ---
 
-## 15. 版本历史
+## 14. 版本历史
 
 | 版本 | 变更 |
 |---|---|

@@ -8,12 +8,14 @@
 """
 import argparse
 import csv
+import math
 import os
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt                                    # noqa: E402
+from matplotlib.ticker import MultipleLocator                       # noqa: E402
 import numpy as np                                                 # noqa: E402
 
 matplotlib.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei",
@@ -27,6 +29,7 @@ FIG_RHO = "fig_single_rho.png"
 RED = "#d62728"
 RED_D = "#7f0000"
 GREEN = "#2ca02c"
+GREY = "#8a939c"
 
 
 def _f(row, key, default=0.0):
@@ -44,6 +47,9 @@ def load(path):
     with open(path, newline="", encoding="utf-8-sig") as f:
         for r in csv.DictReader(f):
             if not r.get("theta_i_mean") or not r.get("theta_r_mean"):
+                continue
+            if not np.isfinite(_f(r, "theta_r_mean")):
+                print("  [skip] %-24s 没有有效帧" % r["group"])
                 continue
             rows.append(dict(group=r["group"],
                              ti=_f(r, "theta_i_mean"),
@@ -111,8 +117,12 @@ def main(argv=None):
         coeff, r2 = fit_curve(rows, order)
     fit_name = {"linear": "一次", "quadratic": "二次", "cubic": "三次"}
 
-    # ---------------- 单张 1：θr–θi ----------------
-    fig, ax = plt.subplots(figsize=(7.4, 4.6), dpi=220)
+    # 两张图共用：角度两轴统一取 20–80°，画布保持原来的横版比例
+    xlo, xhi = 20.0, 80.0
+    FIG_SIZE = (7.4, 4.6)
+
+    # ---------------- 单张 1：θr–θi（两轴都取同一角度范围，不做等比例） ----------------
+    fig, ax = plt.subplots(figsize=FIG_SIZE, dpi=220)
     ax.errorbar(x, tr, yerr=e_tr, fmt="o", ms=6, capsize=3.5, lw=1.2,
                 color=RED, label="反射角 θr（%d 组）" % len(rows))
     if coeff is not None:
@@ -122,25 +132,44 @@ def main(argv=None):
                 label="拟合（%s）  R² = %.2f" % (fit_name[args.fit], r2))
     ax.set_ylabel("反射角 θr (deg)", fontsize=11)
     style(ax)
-    ax.set_xlim(x.min() - 1.8, x.max() + 1.8)
-    ax.set_ylim(np.min(tr - e_tr) - 0.9, np.max(tr + e_tr) + 1.6)
+
+    ax.set_xlim(xlo, xhi)
+    ax.set_ylim(xlo, xhi)                  # 角度两轴都取同一范围（20–80）
+    ax.xaxis.set_major_locator(MultipleLocator(10))
+    ax.yaxis.set_major_locator(MultipleLocator(10))
+    ax.xaxis.set_minor_locator(MultipleLocator(5))
+    ax.yaxis.set_minor_locator(MultipleLocator(5))
+    ax.plot([xlo, xhi], [xlo, xhi], ls=":", lw=1.1, color=GREY, zorder=0)
+    ax.text(xlo + 0.40 * (xhi - xlo), xlo + 0.67 * (xhi - xlo),
+            "θr = θi（镜面反射）", fontsize=8.5, color=GREY,
+            ha="left", va="bottom")
+    # 超出上限的点：在顶边画三角标记并标数值（不剪掉信息）
+    for xi, yi in zip(x, tr):
+        if yi > xhi:
+            ax.plot([xi], [xhi - 0.9], marker="^", ms=7, mfc="white",
+                    mec=GREY, mew=1.2, ls="none", zorder=5)
+            ax.annotate("%.1f" % yi, xy=(xi, xhi - 0.9), xytext=(9, 0),
+                        textcoords="offset points", fontsize=8, color=GREY,
+                        va="center", ha="left")
     ax.legend(fontsize=9, frameon=False, loc="upper left")
     fig.tight_layout()
     p1 = os.path.join(outdir, FIG_TR)
     fig.savefig(p1, facecolor="white")
     plt.close(fig)
 
-    # ---------------- 单张 2：ρ–θi ----------------
-    fig, ax = plt.subplots(figsize=(7.4, 4.6), dpi=220)
+    # ---------------- 单张 2：ρ–θi（画布与横轴和上面完全一致） ----------------
+    fig, ax = plt.subplots(figsize=FIG_SIZE, dpi=220)
     ax.errorbar(x, rho, yerr=e_rho, fmt="s", ms=6, capsize=3.5, lw=1.2,
                 color=GREEN,
                 label=r"$\rho=\tan\theta_r/\tan\theta_i$（%d 组）" % len(rows))
     ax.axhline(1.0, ls=":", lw=1.1, color="gray")
-    ax.text(x.min() - 1.2, 1.06, "ρ = 1（镜面反射）", fontsize=8.5,
+    ax.text(xlo + 0.04 * (xhi - xlo), 1.06, "ρ = 1（镜面反射）", fontsize=8.5,
             color="gray", va="bottom")
     ax.set_ylabel(r"$\rho$", fontsize=12)
     style(ax)
-    ax.set_xlim(x.min() - 1.8, x.max() + 1.8)
+    ax.set_xlim(xlo, xhi)                      # 与 θr 图同一横轴范围 20–80
+    ax.xaxis.set_major_locator(MultipleLocator(10))
+    ax.xaxis.set_minor_locator(MultipleLocator(5))
     ax.set_ylim(0.6, max(rho + 1.2))
     ax.legend(fontsize=9, frameon=False, loc="upper right")
     fig.tight_layout()

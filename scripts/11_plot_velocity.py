@@ -18,6 +18,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt                                    # noqa: E402
 import numpy as np                                                 # noqa: E402
+from matplotlib.ticker import MultipleLocator                      # noqa: E402
 
 matplotlib.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei",
                                           "DejaVu Sans"]
@@ -60,7 +61,7 @@ def load(root):
     path = os.path.join(root, SUMMARY)
     if not os.path.exists(path):
         raise SystemExit("找不到 %s —— 先跑 04_report.py" % path)
-    rows = []
+    rows, skipped = [], []
     with open(path, newline="", encoding="utf-8-sig") as f:
         for r in csv.DictReader(f):
             v, src = velocity_of(root, r)
@@ -68,6 +69,9 @@ def load(root):
                 continue
             n_valid = _f(r, "n_valid", 0)
             ratio = _f(r, "valid_ratio", 1.0)
+            if not np.isfinite(_f(r, "theta_r_mean")):
+                skipped.append((r["group"], v))
+                continue
             rows.append(dict(
                 group=r["group"], v=v, v_src=src,
                 ti=_f(r, "theta_i_mean"), tr=_f(r, "theta_r_mean"),
@@ -75,6 +79,8 @@ def load(root):
                 rho_sd=_f(r, "rho_std"), n_valid=n_valid,
                 weak=(ratio < 0.2 or n_valid < 10)))
     rows.sort(key=lambda d: d["v"])
+    for g, v in skipped:
+        print("  [skip] %-10s V=%.2f  没有有效帧（全部 none/invalid）" % (g, v))
     return rows
 
 
@@ -105,6 +111,15 @@ def draw_tr(ax, rows, fs=9):
     ax.legend(fontsize=fs, frameon=False, loc="lower right")
     style(ax)
     ax.set_xlim(rows[0]["v"] - 0.22, rows[-1]["v"] + 0.22)
+    ax.set_ylim(20.0, 80.0)                    # 角度轴统一 20–80
+    ax.yaxis.set_major_locator(MultipleLocator(10))
+    for r in rows:                             # 超出上限的点画在顶边
+        if r["tr"] > 79.4:
+            ax.plot([r["v"]], [79.0], marker="^", ms=7, mfc="white",
+                    mec=GREY, mew=1.2, ls="none", zorder=5)
+            ax.annotate("%.1f" % r["tr"], xy=(r["v"], 79.0), xytext=(-9, 0),
+                        textcoords="offset points", fontsize=8, color=GREY,
+                        va="center", ha="right")
 
 
 def draw_rho(ax, rows, fs=9):
