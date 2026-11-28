@@ -140,6 +140,8 @@ def cmd_review(args):
     groups = _groups(root, cfg, args.group)
     n = pipeline.review(root, groups, cfg)
     print("signed off %d group(s)" % n)
+    # 03 的收尾：直接把汇总数据（csv/json）写出来，绘图留给 04
+    pipeline.write_summary(root, None, cfg)
     return 0
 
 
@@ -147,9 +149,8 @@ def cmd_report(args):
     root = _need_root(args.root)
     cfg = _cfg(root, args)
     groups = _groups(root, cfg, args.group)
-    # the dataset summary always covers every group that has a result, so a
-    # filtered report never truncates the table
-    pipeline.write_summary(root, None, cfg, out_name=args.out)
+    # 04 只画图：数据用 03 写好的汇总表
+    pipeline.write_summary_figure(root)
     pipeline.make_samples(root, groups, cfg, out_name=args.out)
     return 0
 
@@ -170,10 +171,11 @@ def cmd_all(args):
     for g in groups:
         pipeline.measure_group(root, g, cfg, stride=args.stride,
                                workers=args.workers, force=args.force)
-    pipeline.write_summary(root, None, cfg)
-    pipeline.make_samples(root, groups, cfg)
     if not args.no_review:
         pipeline.review(root, groups, cfg)
+    pipeline.write_summary(root, None, cfg)
+    pipeline.write_summary_figure(root)
+    pipeline.make_samples(root, groups, cfg)
     return 0
 
 

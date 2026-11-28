@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """第 0 步：把射流速度登记到每个组的 baseline.json（测量之前就该填）。
 
-    python scripts/00_set_velocity.py "D:\\data\\20261112_8group" --all
-    python scripts/00_set_velocity.py "<组目录>" --v 2.5
-    python scripts/00_set_velocity.py "<根目录>" --group 2.5 --v 2.5
+    python scripts/07_set_velocity.py "D:\\data\\20261112_8group" --all
+    python scripts/07_set_velocity.py "<组目录>" --v 2.5
+    python scripts/07_set_velocity.py "<根目录>" --group 2.5 --v 2.5
 
 写进 <组>/baseline.json：
     "velocity_mps": 2.5,

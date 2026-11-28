@@ -61,7 +61,7 @@ def compute(base, res, cfg, phys, diameter_px=None):
     d_px = float(diameter_px or base.get("jet_diameter_px") or 0)
     if d_px <= 0:
         return None, ("no jet diameter in baseline.json -- run "
-                      "07_mark_diameter.py first")
+                      "06_mark_diameter.py first")
     scale = float(base.get("diameter_px_per_mm") or cfg.get("px_per_mm") or 0)
     if scale <= 0:
         return None, "no px_per_mm (run 05_calibrate.py)"

@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """Step 6 - rho and d(theta_r)/d(theta_i) against the incident angle.
 
-    python scripts/06_plot_rho.py "D:\\data\\20261119_11group"
-    python scripts/06_plot_rho.py "D:\\data\\20261119_11group" --min-dx 1.5
-    python scripts/06_plot_rho.py "D:\\data\\20261119_11group" --fit linear
+    python scripts/09_plot_rho.py "D:\\data\\20261119_11group"
+    python scripts/09_plot_rho.py "D:\\data\\20261119_11group" --min-dx 1.5
+    python scripts/09_plot_rho.py "D:\\data\\20261119_11group" --fit linear
 
 Reads ``<dataset>/jet_angle_summary.csv`` (written by ``04_report.py``), sorts
 the groups by the mean incident angle and writes

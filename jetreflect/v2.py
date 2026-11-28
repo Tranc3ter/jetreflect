@@ -56,7 +56,6 @@ DEFAULT_PARAMS = {
     "wall_margin": 10.0,     # keep this far from the surface (px)
     "seed_min_v": 18.0,      # incident seed must be this far from the surface
     "min_inc_points": 25,
-    "min_ref_points": 12,
     "rms_i_max": 2.0,
     "rms_r_max": 12.0,       # loose: the outgoing *boundary* undulates (see below)
     "se_max": 0.02,          # ... so gate on the standard error of its slope
@@ -66,8 +65,10 @@ DEFAULT_PARAMS = {
     "ref_v": [3.0, 140.0],   # band (distance from surface) searched for it
     "ref_u_max": 340.0,      # how far along the surface to follow it
     "ref_min_len": 60.0,     # contiguous length required (px)
-    "env_thin": 6,           # a ridge, not a thick dark body
-    "min_mid_points": 15,    # columns needed for the centre line
+    "bright_min_width": 2.0,   # bright core width range (px)
+    "bright_max_width": 26.0,
+    "bright_contrast": 12.0,   # core peak must be this close to bg (gray levels)
+    "min_bright_points": 15,   # columns needed to fit the bright axis
     "min_axis_angle": 8.0,   # the two axes must not be collinear
     "min_frames": 20,
 }
@@ -300,80 +301,15 @@ def _incident(scene, img):
     return res, ""
 
 
-def _envelope(view, p, imp, inc_r, side, s, bg, guard=16.0):
-    """Outer boundary of the outgoing stream, sampled along the surface.
+def _bright_axis(view, p, imp, inc_r, side, s, bg, guard=16.0):
+    """Bright core of the outgoing column, sandwiched by two dark edges.
 
-    A stream leaving almost tangentially hugs the plate for the first tens of
-    pixels, so its inner dark edge merges with the plate edge and a two-edge
-    "pair" cannot be tracked there.  Its *outer* edge, however, is a clean dark
-    ridge.  Sampling that ridge at every ``u`` and fitting ``v = m*u + b``
-    gives the direction of the stream; a constant offset (the stream radius)
-    does not affect the angle.
-
-    Returns ``(m, b, n, rms, kmin, kmax)`` or ``None``.
-    """
-    h, w = view.img.shape[:2]
-    v0, v1 = float(p["ref_v"][0]), float(p["ref_v"][1])
-    xp, yp = float(imp[0]), float(imp[1])
-    thr = bg - float(p["cmin"])
-    step = max(1, int(p["step"]))
-    thin = int(p.get("env_thin", 6))
-    us, vs = [], []
-    for k in range(1, int(p["ref_u_max"] / step)):
-        u = float(k * step)
-        y = int(round(yp + side * u))
-        if y < 2 or y >= h - 2:
-            break
-        xa = int(round(xp + s * v0))
-        xb = int(round(xp + s * v1))
-        xa, xb = min(xa, xb), max(xa, xb)
-        xa, xb = max(1, xa), min(w - 2, xb)
-        if xb - xa < 20:
-            break
-        prof = view.img[y, xa:xb + 1].astype(np.float32)
-        if s < 0:
-            prof = prof[::-1]                     # index 0 = next to the plate
-        dark = np.nonzero(prof < thr)[0]
-        if dark.size == 0:
-            continue
-        i = int(dark[-1])                          # outermost dark sample
-        if i >= prof.size - thin - 2 or i < 2:
-            continue
-        beyond = prof[i + 3:i + 3 + thin]
-        if beyond.size < 3 or float(np.mean(beyond)) <= bg - 0.5 * p["cmin"]:
-            continue                               # thick dark body, not a ridge
-        v = v0 + (v1 - v0) * i / float(max(1, prof.size - 1))
-        x = xp + s * v
-        if inc_r.distance((x, y)) < guard:         # the incoming jet itself
-            continue
-        us.append(u)
-        vs.append(v)
-    if len(us) < int(p["min_ref_points"]):
-        return None
-    u = np.asarray(us, float)
-    v = np.asarray(vs, float)
-    m, b = np.polyfit(u, v, 1)
-    r = v - (m * u + b)
-    mad = float(np.median(np.abs(r - np.median(r)))) + 1e-6
-    keep = np.abs(r - np.median(r)) < max(1.2, 4.0 * 1.4826 * mad)
-    if keep.sum() >= max(8, int(p["min_ref_points"])):
-        m, b = np.polyfit(u[keep], v[keep], 1)
-        r = v[keep] - (m * u[keep] + b)
-        u, v = u[keep], v[keep]
-    rms = float(np.std(r))
-    se = rms / max(1.0, math.sqrt(float(u.size))) / max(1.0, float(np.std(u)))
-    return float(m), float(b), int(u.size), rms, float(u.min()), float(u.max()), \
-        float(se)
-
-
-def _midline(view, p, imp, inc_r, side, s, bg, guard=16.0):
-    """Centre line of the outgoing stream = (outer edge + inner edge) / 2.
-
-    The stream is a liquid cylinder: its two dark silhouettes are symmetric
-    about the axis, so their mean cancels both the interface waves and the
-    opening of the cone.  The inner edge only exists where the stream has
-    separated from the surface (a bright gap in front of it); columns where it
-    is still glued to the plate are skipped.
+    The stream is a liquid cylinder lit from behind: two dark silhouettes and a
+    bright core in between.  For every ``u`` we look at the profile across the
+    stream, take the *last* two dark runs (the inner one next to the plate, the
+    outer one on the fluid side) and, only if the gap between them is bright,
+    locate the peak of that gap.  Columns without such a sandwiched core are
+    skipped (glued to the plate, droplets, broken stream).
 
     Returns ``(m, b, n, rms, umin, umax, se)`` or ``None``.
     """
@@ -382,6 +318,10 @@ def _midline(view, p, imp, inc_r, side, s, bg, guard=16.0):
     xp, yp = float(imp[0]), float(imp[1])
     thr = bg - float(p["cmin"])
     step = max(1, int(p["step"]))
+    wmin = float(p.get("bright_min_width", 2.0))
+    wmax = float(p.get("bright_max_width", 26.0))
+    cmin_core = float(p.get("bright_contrast", 12.0))
+    need = int(p["min_bright_points"])
     us, cs = [], []
     for k in range(1, int(p["ref_u_max"] / step)):
         u = float(k * step)
@@ -397,28 +337,40 @@ def _midline(view, p, imp, inc_r, side, s, bg, guard=16.0):
         prof = view.img[y, xa:xb + 1].astype(np.float32)
         if s < 0:
             prof = prof[::-1]                      # index 0 = next to the plate
-        dark = prof < thr
-        idxs = np.nonzero(dark)[0]
-        if idxs.size == 0:
+        idx = np.nonzero(prof < thr)[0]
+        if idx.size == 0:
             continue
-        end = int(idxs[-1])                        # outer silhouette
-        start = end
-        while start - 1 >= 0 and dark[start - 1]:
-            start -= 1
-        if start < 4:                              # still glued to the surface
+        # split the dark samples into contiguous runs
+        cut = np.nonzero(np.diff(idx) > 1)[0]
+        runs = []
+        st = 0
+        for c in cut:
+            runs.append((int(idx[st]), int(idx[c])))
+            st = c + 1
+        runs.append((int(idx[st]), int(idx[-1])))
+        if len(runs) < 2:
             continue
-        if bool(dark[max(0, start - 3):start].any()):
-            continue                               # no clean gap: not separated
+        in0, in1 = runs[-2]                        # inner edge (plate side)
+        out0, out1 = runs[-1]                      # outer edge (fluid side)
+        if in0 < 3 or out1 > prof.size - 4:
+            continue                               # not separated / cut by window
+        c0, c1 = in1 + 1, out0 - 1                 # bright core between the edges
+        if c1 - c0 < wmin or c1 - c0 > wmax:
+            continue
+        core = prof[c0:c1 + 1]
+        peak = float(core.max())
+        if peak < bg - cmin_core:                  # no bright core -> not a stream
+            continue
+        plate = np.nonzero(core >= peak - 3.0)[0]
+        i_sub = float(plate.mean())                # plateau centre = axis
         scale = (v1 - v0) / float(max(1, prof.size - 1))
-        v_top = v0 + scale * end
-        v_bot = v0 + scale * start
-        c = 0.5 * (v_top + v_bot)
-        x = xp + s * c
+        v_core = v0 + scale * (c0 + i_sub)
+        x = xp + s * v_core
         if inc_r.distance((x, y)) < guard:         # the incoming jet itself
             continue
         us.append(u)
-        cs.append(c)
-    if len(us) < int(p["min_mid_points"]):
+        cs.append(v_core)
+    if len(us) < need:
         return None
     u = np.asarray(us, float)
     c = np.asarray(cs, float)
@@ -426,11 +378,10 @@ def _midline(view, p, imp, inc_r, side, s, bg, guard=16.0):
     r = c - (m * u + b)
     mad = float(np.median(np.abs(r - np.median(r)))) + 1e-6
     keep = np.abs(r - np.median(r)) < max(1.0, 4.0 * 1.4826 * mad)
-    if keep.sum() >= int(p["min_mid_points"]):
+    if keep.sum() >= need:
         m, b = np.polyfit(u[keep], c[keep], 1)
         r = c[keep] - (m * u[keep] + b)
-        u = u[keep]
-        c = c[keep]
+        u, c = u[keep], c[keep]
     rms = float(np.std(r))
     se = rms / max(1.0, math.sqrt(float(u.size))) / max(1.0, float(np.std(u)))
     return float(m), float(b), int(u.size), rms, float(u.min()), float(u.max()), \
@@ -438,7 +389,7 @@ def _midline(view, p, imp, inc_r, side, s, bg, guard=16.0):
 
 
 def _reflected(scene, img, inc, impact):
-    """Direction of the outgoing stream.  Returns ``(dict|None, status, why)``."""
+    """Direction of the outgoing stream, from the bright core of the column."""
     p = scene.params
     base = scene.base
     view = View(img, base.tilt_deg(), base, scene.sign)
@@ -451,7 +402,6 @@ def _reflected(scene, img, inc, impact):
         geom.apply_matrix(view.m, inc["line"].point_at(0.0)),
         geom.apply_matrix(view.m, inc["line"].point_at(120.0)))
 
-    v0, v1 = float(p["ref_v"][0]), float(p["ref_v"][1])
     xp, yp = float(imp[0]), float(imp[1])
     s = 1.0 if float(view.dist((xp + 2.0, yp))) >= \
         float(view.dist((xp - 2.0, yp))) else -1.0
@@ -459,70 +409,49 @@ def _reflected(scene, img, inc, impact):
     if bg < 90:                                    # underexposed frame
         return None, "invalid", "frame too dark (bg %.0f)" % bg
 
-    best = None
-    had_any = False
     tan_min = math.tan(math.radians(float(p["min_axis_angle"])))
     guard = max(12.0, 0.5 * float(inc.get("width") or 16.0) + 10.0)
+
+    best = None
     for side in (1, -1):
-        fit = _envelope(view, p, imp, inc_r, side, s, bg, guard=guard)
+        fit = _bright_axis(view, p, imp, inc_r, side, s, bg, guard=guard)
         if fit is None:
             continue
-        had_any = True
-        m, b, n, rms, kmin, kmax, se = fit
-        span = kmax - kmin
-        if span < float(p["ref_min_len"]) or kmin > 60.0:
+        m, b, n, rms, umin, umax, se = fit
+        if umax - umin < float(p["ref_min_len"]):
             continue
-        if abs(m) < tan_min:
-            continue                            # parallel: just the plate edge
-        if not (-12.0 <= b <= 30.0):
-            continue                            # not attached to the impact
-        if se > float(p["se_max"]):
-            continue                            # direction not determined
-        if best is None or span > best[0]:
-            best = (span, -rms, side, m, b, n, rms, kmin, kmax, se)
+        if umin > 140.0:                           # starts too far from impact
+            continue
+        if abs(m) < tan_min:                       # parallel: just the plate
+            continue
+        if abs(b) / math.hypot(1.0, m) > 30.0:     # not attached to the impact
+            continue
+        if se > float(p["se_max"]):                # direction not determined
+            continue
+        if best is None or n > best[2]:
+            best = (side, m, b, n, rms, umin, umax, se)
 
     if best is None:
-        return None, "none", ("no outgoing boundary" if not had_any
-                              else "no coherent outgoing boundary")
-    _, _, side, m, b, n, rms, kmin, kmax, se = best
+        return None, "none", "no bright core between two dark edges"
+
+    side, m, b, n, rms, umin, umax, se = best
     if rms > float(p["rms_r_max"]):
-        return None, "invalid", ("outgoing boundary is not a straight jet "
-                                 "(rms %.1f px, droplets?)" % rms)
+        return None, "invalid", ("bright core is not straight (rms %.1f px)"
+                                 % rms)
 
     n_ref = geom.unit(view.m[:, :2].dot(base.n))
+    d = geom.unit(np.array([s * m, side], float))
+    theta_r = math.degrees(math.acos(min(1.0, abs(float(np.dot(d, n_ref))))))
 
-    def _angle(mm):
-        d = geom.unit(np.array([s * mm, side], float))
-        return math.degrees(math.acos(min(1.0, abs(float(np.dot(d, n_ref))))))
+    q = np.array([[xp + s * (m * k + b), yp + side * k]
+                  for k in (umin, umax)], float)
+    q_img = geom.apply_matrix(view.minv, q)
+    line = geom.Line.from_points(q_img[0], q_img[1])
 
-    def _line_of(mm, bb, u0, u1):
-        q = np.array([[xp + s * (mm * k + bb), yp + side * k]
-                      for k in (u0, u1)], float)
-        q_img = geom.apply_matrix(view.minv, q)
-        return geom.Line.from_points(q_img[0], q_img[1]), q_img
-
-    theta_env = _angle(m)
-    line, seg = _line_of(m, b, kmin, kmax)
-    theta_r, rms_use, n_use = theta_env, rms, n
-    source, d_axis_env = "envelope", None
-
-    mid = _midline(view, p, imp, inc_r, side, s, bg, guard=guard)
-    if mid is not None:
-        m2, b2, n2, rms2, u0, u1, _se2 = mid
-        theta_axis = _angle(m2)
-        theta_r, rms_use, n_use = theta_axis, rms2, n2
-        line, seg = _line_of(m2, b2, u0, u1)
-        source = "axis"
-        d_axis_env = theta_axis - theta_env
-    # else: the stream never separates from the surface -> outer edge only
-
-    return {"line": line, "theta_r": float(theta_r), "rms": float(rms_use),
-            "n": int(n_use), "span": float(kmax - kmin), "offset": float(b),
-            "side": int(side), "source": source,
-            "seg": [seg[0].tolist(), seg[1].tolist()],
-            "theta_r_env": float(theta_env),
-            "d_axis_env": None if d_axis_env is None else float(d_axis_env)}, \
-        "ok", ""
+    return {"line": line, "theta_r": float(theta_r), "rms": float(rms),
+            "n": int(n), "span": float(umax - umin), "offset": float(b),
+            "side": int(side), "source": "bright",
+            "seg": [q_img[0].tolist(), q_img[1].tolist()]}, "ok", ""
 
 
 # --------------------------------------------------------------- gates
@@ -556,8 +485,7 @@ def new_row(path, frame=None):
             "angle_between": None, "x_imp": None, "y_imp": None,
             "rms_i": None, "rms_r": None, "n_i": 0, "n_r": 0,
             "inc_line": None, "ref_line": None, "valid": False,
-            "ref_seg": None,
-            "ref_source": None, "theta_r_env": None, "d_axis_env": None}
+            "ref_seg": None, "ref_source": None}
 
 
 def measure(scene, path, frame=None):
@@ -602,8 +530,6 @@ def measure(scene, path, frame=None):
     out["n_r"] = ref["n"]
     out["theta_r"] = float(ref["theta_r"])
     out["ref_source"] = ref.get("source")
-    out["theta_r_env"] = ref.get("theta_r_env")
-    out["d_axis_env"] = ref.get("d_axis_env")
     out["angle_between"] = float(geom.angle_line_to_line(inc["line"],
                                                          ref["line"]))
 

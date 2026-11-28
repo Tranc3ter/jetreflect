@@ -158,8 +158,16 @@ def groups_of(root, cfg=None):
     cfg = cfg or load_config(root)
     skip = ["sample", "jet_angle", "results", "_summary"] + \
         list(cfg.get("skip_dirs") or [])
-    return discover_groups(root, min_frames=int(cfg.get("min_frames", 20)),
-                           skip=skip)
+    groups = discover_groups(root, min_frames=int(cfg.get("min_frames", 20)),
+                             skip=skip)
+    if not groups and os.path.exists(os.path.join(root, "baseline.json")):
+        # 传进来的是单个组目录：把它自己当成一组（方便单帧预览）
+        imgs = list_images(root)
+        if imgs:
+            name = os.path.basename(os.path.abspath(root))
+            groups = [{"name": name, "label": name.strip(), "dir": root,
+                       "images": imgs}]
+    return groups
 
 
 def out_dir(group, name=OUT_NAME):
@@ -334,7 +342,7 @@ def _write_group_outputs(root, group, cfg, ctx, rows, od,
 
     # ---- per-frame CSV -------------------------------------------------
     cols = ["frame", "file", "status", "valid", "theta_i", "theta_r",
-            "theta_r_env", "d_axis_env", "source", "angle_between", "rho",
+            "source", "angle_between", "rho",
             "x_imp", "y_imp", "rms_i", "rms_r", "n_i", "n_r", "why", "note"]
     with open(os.path.join(od, "per_frame.csv"), "w", newline="",
               encoding="utf-8-sig") as f:
@@ -613,6 +621,7 @@ def _stat_row(root, group, cfg, out_name=OUT_NAME):
 
 
 def write_summary(root, groups=None, cfg=None, out_name=OUT_NAME):
+    """Write the per-group data tables (csv + json).  No plotting."""
     cfg = cfg or load_config(root)
     groups = groups or groups_of(root, cfg)
     rows = []
@@ -632,9 +641,27 @@ def write_summary(root, groups=None, cfg=None, out_name=OUT_NAME):
     js = {"schema": SUMMARY_SCHEMA, "created": now_iso(),
           "dataset": cfg.get("dataset"), "groups": rows}
     write_json(os.path.join(root, "jet_angle_summary.json"), js)
-    _plot_summary(root, rows)
     print("summary -> %s" % path)
     return rows
+
+
+def read_summary_rows(root):
+    """Rows written by :func:`write_summary` (from ``jet_angle_summary.json``)."""
+    js = read_json(os.path.join(root, "jet_angle_summary.json"))
+    if not js:
+        return None
+    return list(js.get("groups") or [])
+
+
+def write_summary_figure(root, rows=None):
+    """Draw ``fig_summary.png`` from the summary table (plotting only)."""
+    rows = rows if rows is not None else read_summary_rows(root)
+    if not rows:
+        print("no summary yet - run 03_review.py first")
+        return False
+    _plot_summary(root, rows)
+    print("figure  -> %s" % os.path.join(root, "fig_summary.png"))
+    return True
 
 
 def _plot_summary(root, rows):

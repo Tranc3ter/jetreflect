@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """把一组测量结果渲染成带标注的 MP4（基准面 + 入射轴 + 出流轴 + 数值）。
 
-    python 10_overlay_video.py <组目录> [--out 输出.mp4] [--fps 30] [--scale 1.5]
+    python 12_overlay_video.py <组目录> [--out 输出.mp4] [--fps 30] [--scale 1.5]
 
 组目录里需要有 jet_angle/result.json（02_measure.py 的产物）和原始 tif。
 """

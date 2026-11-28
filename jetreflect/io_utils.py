@@ -75,7 +75,8 @@ def discover_groups(root, min_frames=20, skip=None):
     """Immediate sub-folders of *root* that look like one measurement group."""
     skip = set(s.lower() for s in (skip or ()))
     default_skip = {"sample", "jet_angle", "results", "_summary", "doc", "docs",
-                    "config", "tools", "deck", "paper", ".git", "__pycache__"}
+                    "config", "tools", "deck", "paper", ".git", "__pycache__",
+                    "preview", "preview_bright", "jet_angle_sample"}
     out = []
     try:
         names = os.listdir(root)

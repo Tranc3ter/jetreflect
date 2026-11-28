@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """Step 7 - mark the initial jet diameter by hand (one value per group).
 
-    python scripts/07_mark_diameter.py "D:\\data\\20261119_11group"
-    python scripts/07_mark_diameter.py "D:\\data\\20261119_11group" --group M005
-    python scripts/07_mark_diameter.py "D:\\data\\20261119_11group" ^
+    python scripts/06_mark_diameter.py "D:\\data\\20261119_11group"
+    python scripts/06_mark_diameter.py "D:\\data\\20261119_11group" --group M005
+    python scripts/06_mark_diameter.py "D:\\data\\20261119_11group" ^
         --diameter-px 19.4 --group "MX-5 2058-1-M005-N000"    (no window)
 
 Mark the **contracted liquid interface at the nozzle exit**: two clicks on the

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """单张图：θr–θi 与 ρ–θi（只画测得的组，默认按入射角升序）。
 
-    python 09_plot_single.py <数据集根目录> [--out 输出目录] [--fit none|quadratic]
+    python 10_plot_single.py <数据集根目录> [--out 输出目录] [--fit none|quadratic]
 
 输入：<根目录>/jet_angle_summary.csv（04_report.py 的产物）
 输出：fig_single_theta_r.png、fig_single_rho.png
